@@ -1,0 +1,113 @@
+# ESP32-WROOM-32 — pin capability map
+#
+# Source: Espressif ESP32 datasheet (ESP32-D0WDQ6 core) + ESP32-WROOM-32 module
+# pinout diagram. Pin numbers here are the *module* pin numbers (1..38).
+#
+# Used by the pin-assignment step of the assembler skill. Each entry lists
+# the capabilities a pin can provide; the solver picks one capability per
+# pin such that every block signal gets matched.
+#
+# Semantics:
+#   strapping:   pin affects boot mode — avoid non-idle external drivers
+#   input_only:  GPIOs 34..39 cannot be configured as outputs
+#   adc2:        ADC2 channels cannot be used while WiFi is active
+#   default_state: pin state at reset that must not be violated
+
+part: ESP32-WROOM-32
+family: esp32
+core: ESP32-D0WDQ6
+package: module-38pin
+vcc: 3.3
+io_voltage: 3.3
+
+# Peripheral presets — what signals the MCU can source/sink.
+# Each peripheral lists the PINS that can provide that function.
+peripherals:
+  UART0:    {tx: [IO1],        rx: [IO3]}          # boot console — avoid for user UART
+  UART1:    {tx: [any_output], rx: [any_input]}    # matrix routed
+  UART2:    {tx: [any_output], rx: [any_input]}
+  I2C0:     {sda: [any_io],    scl: [any_io]}
+  I2C1:     {sda: [any_io],    scl: [any_io]}
+  SPI_HSPI: {sck: [IO14],      miso: [IO12], mosi: [IO13], cs: [IO15]}
+  SPI_VSPI: {sck: [IO18],      miso: [IO19], mosi: [IO23], cs: [IO5]}
+  # SDIO uses fixed pins IO2,4,12,13,14,15 on the HS2 interface.
+
+# Pin table — module pin numbers.
+pins:
+  # ----- power / rst -----
+  "1":  {name: GND,   kind: power}
+  "2":  {name: 3V3,   kind: power}
+  "3":  {name: EN,    kind: reset,    notes: "active-high reset / CHIP_PU"}
+
+  # ----- input-only ADC1 pins (GPIO34..39) -----
+  "4":  {gpio: IO36, input_only: true, capabilities: [adc1_ch0],  notes: "SENSOR_VP"}
+  "5":  {gpio: IO39, input_only: true, capabilities: [adc1_ch3],  notes: "SENSOR_VN"}
+  "6":  {gpio: IO34, input_only: true, capabilities: [adc1_ch6]}
+  "7":  {gpio: IO35, input_only: true, capabilities: [adc1_ch7]}
+  "8":  {gpio: IO32, capabilities: [gpio, adc1_ch4, touch9, xtal32k_p]}
+  "9":  {gpio: IO33, capabilities: [gpio, adc1_ch5, touch8, xtal32k_n]}
+  "10": {gpio: IO25, capabilities: [gpio, adc2_ch8, dac1]}
+  "11": {gpio: IO26, capabilities: [gpio, adc2_ch9, dac2]}
+  "12": {gpio: IO27, capabilities: [gpio, adc2_ch7, touch7]}
+  "13": {gpio: IO14, capabilities: [gpio, adc2_ch6, touch6, hspi_clk, mtms]}
+  "14": {gpio: IO12, capabilities: [gpio, adc2_ch5, touch5, hspi_miso, mtdi],
+         strapping: true, notes: "must be LOW at boot (VDD_SDIO select)"}
+  "15": {gpio: GND, kind: power}
+  "16": {gpio: IO13, capabilities: [gpio, adc2_ch4, touch4, hspi_mosi, mtck]}
+  "17": {gpio: SHD,  kind: flash, notes: "reserved for internal flash"}
+  "18": {gpio: SWP,  kind: flash, notes: "reserved for internal flash"}
+  "19": {gpio: SCS,  kind: flash, notes: "reserved for internal flash"}
+  "20": {gpio: SCK,  kind: flash, notes: "reserved for internal flash"}
+  "21": {gpio: SDO,  kind: flash, notes: "reserved for internal flash"}
+  "22": {gpio: SDI,  kind: flash, notes: "reserved for internal flash"}
+  "23": {gpio: IO15, capabilities: [gpio, adc2_ch3, touch3, hspi_cs, mtdo],
+         strapping: true, notes: "boot msg silence if pulled LOW"}
+  "24": {gpio: IO2,  capabilities: [gpio, adc2_ch2, touch2, hs2_data0],
+         strapping: true, notes: "must float or LOW at boot"}
+  "25": {gpio: IO0,  capabilities: [gpio, adc2_ch1, touch1],
+         strapping: true, notes: "boot mode select — LOW=download, HIGH=run"}
+  "26": {gpio: IO4,  capabilities: [gpio, adc2_ch0, touch0, hs2_data1]}
+  "27": {gpio: IO16, capabilities: [gpio, u2rxd]}
+  "28": {gpio: IO17, capabilities: [gpio, u2txd]}
+  "29": {gpio: IO5,  capabilities: [gpio, vspi_cs], strapping: true,
+         notes: "must be HIGH at boot"}
+  "30": {gpio: IO18, capabilities: [gpio, vspi_clk]}
+  "31": {gpio: IO19, capabilities: [gpio, vspi_miso, u0cts]}
+  "32": {gpio: IO21, capabilities: [gpio, i2c0_sda_default]}
+  "33": {gpio: IO3,  capabilities: [gpio, u0rxd], notes: "UART0 RX — boot console"}
+  "34": {gpio: IO1,  capabilities: [gpio, u0txd], notes: "UART0 TX — boot console"}
+  "35": {gpio: IO22, capabilities: [gpio, i2c0_scl_default, u0rts]}
+  "36": {gpio: IO23, capabilities: [gpio, vspi_mosi]}
+  "37": {gpio: GND,  kind: power}
+  "38": {gpio: GND,  kind: power}
+
+# Pins safe for general user GPIO (no strapping, no flash, no input-only
+# unless you truly want input-only). The assembler tries these first.
+safe_user_gpio:
+  - IO4
+  - IO16
+  - IO17
+  - IO18
+  - IO19
+  - IO21
+  - IO22
+  - IO23
+  - IO25
+  - IO26
+  - IO27
+  - IO32
+  - IO33
+
+# Input-only pins that are fine for digital inputs (not ADC-critical).
+safe_input_only:
+  - IO34
+  - IO35
+  - IO36
+  - IO39
+
+# Strapping pins — usable but require external pull direction respecting
+# the boot value. Assembler warns when a block is assigned here.
+strapping_pins: [IO0, IO2, IO5, IO12, IO15]
+
+# Pins to avoid entirely unless explicitly overridden in the design file.
+reserved: [IO6, IO7, IO8, IO9, IO10, IO11]   # internal flash on WROOM-32

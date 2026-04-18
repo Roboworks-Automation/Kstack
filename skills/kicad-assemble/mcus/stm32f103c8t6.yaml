@@ -1,0 +1,89 @@
+# STM32F103C8T6 — pin capability map
+# LQFP-48, 72 MHz Cortex-M3, 64K Flash, 20K RAM
+# Pin numbers = LQFP-48 package pins
+
+part: STM32F103C8T6
+family: stm32f
+core: Cortex-M3
+package: LQFP-48
+vcc: 3.3
+io_voltage: 3.3
+
+peripherals:
+  USART1: {tx: [PA9],  rx: [PA10], ck: [PA8],  cts: [PA11], rts: [PA12]}
+  USART2: {tx: [PA2],  rx: [PA3],  ck: [PA4],  cts: [PA0],  rts: [PA1]}
+  USART3: {tx: [PB10], rx: [PB11], ck: [PB12], cts: [PB13], rts: [PB14]}
+  I2C1:   {scl: [PB6], sda: [PB7]}
+  I2C2:   {scl: [PB10], sda: [PB11]}
+  SPI1:   {sck: [PA5], miso: [PA6], mosi: [PA7], nss: [PA4]}
+  SPI2:   {sck: [PB13], miso: [PB14], mosi: [PB15], nss: [PB12]}
+  CAN1:   {rx: [PA11], tx: [PA12]}
+  USB:    {dp: [PA12], dm: [PA11]}
+
+pins:
+  PA0:  {gpio: PA0_WKUP,   capabilities: [gpio, adc_ch0, usart2_cts, tim2_ch1, wkup]}
+  PA1:  {gpio: PA1,        capabilities: [gpio, adc_ch1, usart2_rts, tim2_ch2]}
+  PA2:  {gpio: PA2,        capabilities: [gpio, adc_ch2, usart2_tx,  tim2_ch3]}
+  PA3:  {gpio: PA3,        capabilities: [gpio, adc_ch3, usart2_rx,  tim2_ch4]}
+  PA4:  {gpio: PA4,        capabilities: [gpio, adc_ch4, spi1_nss,   usart2_ck]}
+  PA5:  {gpio: PA5,        capabilities: [gpio, adc_ch5, spi1_sck]}
+  PA6:  {gpio: PA6,        capabilities: [gpio, adc_ch6, spi1_miso,  tim3_ch1]}
+  PA7:  {gpio: PA7,        capabilities: [gpio, adc_ch7, spi1_mosi,  tim3_ch2]}
+  PA8:  {gpio: PA8,        capabilities: [gpio, usart1_ck, tim1_ch1, mco]}
+  PA9:  {gpio: PA9,        capabilities: [gpio, usart1_tx, tim1_ch2]}
+  PA10: {gpio: PA10,       capabilities: [gpio, usart1_rx, tim1_ch3]}
+  PA11: {gpio: PA11,       capabilities: [gpio, usart1_cts, can_rx, usb_dm, tim1_ch4]}
+  PA12: {gpio: PA12,       capabilities: [gpio, usart1_rts, can_tx, usb_dp]}
+  PA13: {gpio: PA13,       capabilities: [jtms, swdio], notes: "SWDIO — avoid unless no debug"}
+  PA14: {gpio: PA14,       capabilities: [jtck, swclk], notes: "SWCLK — avoid unless no debug"}
+  PA15: {gpio: PA15,       capabilities: [gpio, jtdi, spi1_nss_remap, tim2_ch1_remap]}
+  PB0:  {gpio: PB0,        capabilities: [gpio, adc_ch8,  tim3_ch3]}
+  PB1:  {gpio: PB1,        capabilities: [gpio, adc_ch9,  tim3_ch4]}
+  PB2:  {gpio: PB2,        capabilities: [gpio], notes: "BOOT1 strapping pin"}
+  PB3:  {gpio: PB3,        capabilities: [gpio, jtdo, spi1_sck_remap, tim2_ch2_remap]}
+  PB4:  {gpio: PB4,        capabilities: [gpio, jtrst, spi1_miso_remap, tim3_ch1_remap]}
+  PB5:  {gpio: PB5,        capabilities: [gpio, spi1_mosi_remap, tim3_ch2_remap, i2c1_smba]}
+  PB6:  {gpio: PB6,        capabilities: [gpio, i2c1_scl, tim4_ch1, usart1_tx_remap]}
+  PB7:  {gpio: PB7,        capabilities: [gpio, i2c1_sda, tim4_ch2, usart1_rx_remap]}
+  PB8:  {gpio: PB8,        capabilities: [gpio, tim4_ch3, i2c1_scl_remap, can_rx_remap]}
+  PB9:  {gpio: PB9,        capabilities: [gpio, tim4_ch4, i2c1_sda_remap, can_tx_remap]}
+  PB10: {gpio: PB10,       capabilities: [gpio, i2c2_scl, usart3_tx]}
+  PB11: {gpio: PB11,       capabilities: [gpio, i2c2_sda, usart3_rx]}
+  PB12: {gpio: PB12,       capabilities: [gpio, spi2_nss, i2c2_smba, usart3_ck, tim1_bkin]}
+  PB13: {gpio: PB13,       capabilities: [gpio, spi2_sck, usart3_cts, tim1_ch1n]}
+  PB14: {gpio: PB14,       capabilities: [gpio, spi2_miso, usart3_rts, tim1_ch2n]}
+  PB15: {gpio: PB15,       capabilities: [gpio, spi2_mosi, tim1_ch3n]}
+  PC13: {gpio: PC13,       capabilities: [gpio, tamper, rtc_out]}
+  PC14: {gpio: PC14,       capabilities: [osc32_in]}
+  PC15: {gpio: PC15,       capabilities: [osc32_out]}
+
+safe_user_gpio:
+  - PA0_WKUP
+  - PA1
+  - PA2
+  - PA3
+  - PA4
+  - PA5
+  - PA6
+  - PA7
+  - PA8
+  - PA9
+  - PA10
+  - PA11
+  - PA12
+  - PB0
+  - PB1
+  - PB5
+  - PB6
+  - PB7
+  - PB8
+  - PB9
+  - PB10
+  - PB11
+  - PB12
+  - PB13
+  - PB14
+  - PB15
+
+strapping_pins: [PB2]
+reserved: [PA13, PA14]   # SWD debug

@@ -1,0 +1,163 @@
+# Component role classification rules.
+#
+# Order matters — the first matching `match` wins. Patterns are Python
+# regular expressions applied case-insensitively against BOTH the symbol
+# `Value` and the bare part of `lib_id` (everything after the last colon).
+#
+# Add/edit freely. Keep `role` values from the closed vocabulary below so
+# aggregation tables stay consistent:
+#
+#   mcu            — microcontroller / SoC
+#   ldo            — linear regulator
+#   buck           — switching buck regulator
+#   boost          — switching boost
+#   dcdc_isolated  — isolated DC/DC brick (B0505, IEB0105, etc.)
+#   charger        — li-ion / battery charger IC
+#   rs485          — RS-485 transceiver
+#   can            — CAN transceiver
+#   ethernet_mac   — Ethernet MAC/PHY
+#   ethernet_mag   — Ethernet magjack
+#   usb_serial     — USB-UART bridge
+#   wireless_mod   — prefab WiFi/BT/LoRa/GSM module (non-MCU)
+#   adc            — external ADC
+#   dac            — external DAC
+#   rtc            — real-time clock
+#   eeprom         — EEPROM / FRAM / external NVM
+#   flash          — external flash memory
+#   display_drv    — display driver IC (TM1637, MAX7219)
+#   display        — LCD/OLED/segment panel
+#   opto           — optocoupler / photocoupler
+#   driver         — high-side / low-side driver array (ULN2803 etc.)
+#   mosfet         — discrete power FET with a meaningful role
+#   relay          — electromechanical / SSR relay
+#   sensor         — temp / pressure / imu / loadcell / gas
+#   opamp          — op-amp / comparator
+#   logic          — 74xx / 40xx / logic gate
+#   level_shifter  — bidirectional level translator
+#   protection     — TVS / SMAJ / fuse / PTC
+#   crystal        — crystal / oscillator / resonator
+#   connector      — header / terminal block / socket
+#   passive        — R / C / L / diode / LED / ferrite bead  (edges filtered)
+#   unknown        — no rule matched
+
+rules:
+  # --- MCUs -------------------------------------------------------------
+  - {role: mcu, family: esp32-s3,  match: "ESP32[-_]?S3"}
+  - {role: mcu, family: esp32-s2,  match: "ESP32[-_]?S2"}
+  - {role: mcu, family: esp32-c,   match: "ESP32[-_]?C[236]"}
+  - {role: mcu, family: esp32,     match: "ESP32(?!-?S|-?C)"}
+  - {role: mcu, family: esp8266,   match: "ESP8266|ESP-?12|ESP-?01"}
+  - {role: mcu, family: stm32f,    match: "STM32F[0-9]"}
+  - {role: mcu, family: stm32g,    match: "STM32G[0-9]"}
+  - {role: mcu, family: stm32h,    match: "STM32H[0-9]"}
+  - {role: mcu, family: stm32l,    match: "STM32L[0-9]"}
+  - {role: mcu, family: stm8,      match: "STM8"}
+  - {role: mcu, family: atmega,    match: "ATmega|ATMEGA"}
+  - {role: mcu, family: attiny,    match: "ATtiny|ATTINY"}
+  - {role: mcu, family: rp2xxx,    match: "RP2040|RP2350"}
+  - {role: mcu, family: nrf5,      match: "NRF5[12]"}
+  - {role: mcu, family: samd,      match: "SAMD[0-9]"}
+  - {role: mcu, family: tiva,      match: "TM4C[0-9]"}
+  - {role: mcu, family: pic,       match: "PIC1[68]F"}
+  - {role: mcu, family: msp430,    match: "MSP430"}
+  - {role: mcu, family: arduino,   match: "ARDUINO[_-]?(NANO|UNO|MEGA|PRO[_-]?MINI|LEONARDO)"}
+
+  # --- Wireless / comm modules (contain their own MCU — still MCU-ish) --
+  - {role: wireless_mod, family: sim800,   match: "SIM800|SIM808|SIM900"}
+  - {role: wireless_mod, family: sim7xxx,  match: "SIM7[0-9]{3}"}
+  - {role: wireless_mod, family: quectel,  match: "EC20|EC25|EC200|BG9[56]|L76"}
+  - {role: wireless_mod, family: lora,     match: "SX126[78]|SX1278|RA-0[12]|E32-"}
+  - {role: wireless_mod, family: nrf24,    match: "NRF24L01"}
+  - {role: wireless_mod, family: rfm,      match: "RFM9[56789]|RFM69"}
+
+  # --- Power ------------------------------------------------------------
+  - {role: ldo,  family: ams1117,   match: "AMS1117"}
+  - {role: ldo,  family: lm78xx,    match: "L?M?78(05|09|12|15|24)|L78M05|L78L05|L7805|LM7805"}
+  - {role: ldo,  family: lm317,     match: "LM317"}
+  - {role: ldo,  family: rt9193,    match: "RT9193"}
+  - {role: ldo,  family: tps73x,    match: "TPS7[3-9][0-9]"}
+  - {role: ldo,  family: ap2112,    match: "AP2112"}
+  - {role: ldo,  family: mcp1700,   match: "MCP1700|MCP1702"}
+  - {role: ldo,  family: ldo_generic, match: "\\bLDO\\b"}
+  - {role: buck, family: lm2596,    match: "LM2596"}
+  - {role: buck, family: mp1584,    match: "MP1584|MP2307"}
+  - {role: buck, family: xl7015,    match: "XL7015|XL7005|XL7026"}
+  - {role: buck, family: lmr144,    match: "LMR14[0-9]|LMR16[0-9]"}
+  - {role: buck, family: lnk30x,    match: "LNK30[0-9]|LNK31[0-9]|LNK36[0-9]|LNK62[0-9]"}
+  - {role: buck, family: buck_generic, match: "\\bBUCK\\b"}
+  - {role: boost, family: mt3608,   match: "MT3608|MT3606|SX1308"}
+  - {role: dcdc_isolated, family: b05xxs, match: "B0[0-9]{2}[0-9]S[-_]?[0-9]"}
+  - {role: dcdc_isolated, family: iebxxxx, match: "IEB[0-9]{3,4}"}
+  - {role: charger, family: tp4056, match: "TP4056"}
+
+  # --- Comms / transceivers --------------------------------------------
+  - {role: rs485, family: sn65hvd,   match: "SN65HVD[0-9]+|SN75176|SN65176|MAX485|MAX3485|MAX13487|SP3485|ADM2582|ADM2587|LTC2862|LTC485"}
+  - {role: can,   family: can_tx,    match: "MCP2551|MCP2561|MCP2562|TJA1050|TJA1051|SN65HVD23[0-9]|SN65HVD10[0-9]|SN65HVD1040"}
+  - {role: ethernet_mac, family: w5x00, match: "W5100|W5200|W5300|W5500"}
+  - {role: ethernet_mac, family: enc28j60, match: "ENC28J60|ENC424J600"}
+  - {role: ethernet_mac, family: lan8720, match: "LAN872[0-9]|LAN867[0-9]|KSZ80[0-9]{2}"}
+  - {role: ethernet_mag, family: magjack, match: "HR911|HR961|HY911|J0011|RB1-125"}
+  - {role: usb_serial, family: cp210x, match: "CP210[0-9]|CP2102N"}
+  - {role: usb_serial, family: ch340,  match: "CH340|CH341|CH9102"}
+  - {role: usb_serial, family: ft23x,  match: "FT23[0-9]|FT232|FT2232|FT4232"}
+  - {role: level_shifter, family: txs01x, match: "TXS010[0-9]|TXB010[0-9]|TXS0108|TXB0108"}
+  - {role: level_shifter, family: bss138, match: "BSS138"}
+
+  # --- Data converters & sensors ---------------------------------------
+  - {role: adc, family: ads1x1x, match: "ADS1[01][0-9]{2}|ADS111[0-9]"}
+  - {role: adc, family: mcp3xxx, match: "MCP300[0-9]|MCP320[0-9]|MCP3421|MCP3424"}
+  - {role: adc, family: hx711,   match: "HX711"}
+  - {role: dac, family: mcp4xxx, match: "MCP47[0-9]{2}|MCP48[0-9]{2}"}
+  - {role: rtc, family: ds3231,  match: "DS3231|DS1307|DS1302|PCF8563|PCF8523|MCP7940"}
+  - {role: eeprom, family: at24c,match: "AT24C[0-9]+|24LC[0-9]+|M24[0-9]+|FM24[0-9]+"}
+  - {role: flash,  family: w25q, match: "W25Q[0-9]+|MX25L[0-9]+|AT25[0-9]+"}
+
+  - {role: sensor, family: bme,    match: "BME[0-9]+|BMP[0-9]+"}
+  - {role: sensor, family: mpu,    match: "MPU6[0-9]{3}|MPU9[0-9]{3}|ICM2[0-9]{4}"}
+  - {role: sensor, family: ds18b20,match: "DS18B20|DS1820"}
+  - {role: sensor, family: dht,    match: "DHT[0-9]+|AM2[0-9]{3}"}
+  - {role: sensor, family: max6675,match: "MAX6675|MAX31855|MAX31865"}
+  - {role: sensor, family: hx711,  match: "HX711"}          # also adc, but loadcell-specific
+  - {role: sensor, family: ads12xx,match: "ADS12[0-9]{2}"}
+  - {role: sensor, family: loadcell,match: "LOADCELL|LOAD_CELL"}
+  - {role: sensor, family: max861x,match: "MAX861[0-9]|MAX86178"}
+
+  # --- Display / HMI ----------------------------------------------------
+  - {role: display_drv, family: tm1637, match: "TM1637|TM1638|TM1640"}
+  - {role: display_drv, family: max721x,match: "MAX7219|MAX7221"}
+  - {role: display_drv, family: ht16k33,match: "HT16K33"}
+  - {role: display,     family: lcd1602,match: "1602A?|LCD1602|HD44780"}
+  - {role: display,     family: ssd13xx,match: "SSD13[0-9]{2}|SH1106"}
+
+  # --- Isolation / driving ---------------------------------------------
+  - {role: opto, family: pc817,   match: "PC817|PC8[0-9]{2}"}
+  - {role: opto, family: tlp,     match: "TLP[0-9]{3}|TLP281|TLP291|TLP621|TLP2630|TLP521"}
+  - {role: opto, family: 6n13x,   match: "6N13[0-9]|6N137"}
+  - {role: opto, family: hcpl,    match: "HCPL[-_]?[0-9]+"}
+  - {role: opto, family: aqwxx,   match: "AQW2[0-9]{2}"}
+  - {role: opto, family: adum,    match: "ADUM[0-9]+"}
+  - {role: driver, family: uln28xx, match: "ULN280[0-9]|ULN230[0-9]|ULN200[0-9]"}
+  - {role: driver, family: ixd,     match: "IXDN[0-9]+|IXDD[0-9]+|IXDI[0-9]+|IXDF[0-9]+"}
+  - {role: driver, family: ir21xx,  match: "IR21[0-9]{2}|IRS21[0-9]{2}"}
+  - {role: mosfet, family: irfp,    match: "IRFP[0-9]+|IRFB[0-9]+|IRF[0-9]+N"}
+  - {role: mosfet, family: stp,     match: "STP[0-9]+NF[0-9]+|STN[0-9]+NF[0-9]+"}
+
+  - {role: relay, family: srd,      match: "SRD[-_]?[0-9]+VDC"}
+  - {role: relay, family: relay_generic, match: "\\bRELAY\\b"}
+
+  - {role: opamp, family: lm358,   match: "LM358|LM324|LM2904|LM4558|LM741"}
+  - {role: opamp, family: lf356,   match: "LF356|LF357|LF347|LF351"}
+  - {role: opamp, family: opamp_generic, match: "\\bOPAMP\\b|NE5532|TL07[0-9]|TL08[0-9]|MCP60[0-9]{2}|OPA[0-9]+"}
+  - {role: logic, family: 74hc14,  match: "74HC14|74HCT14|40106"}
+  - {role: logic, family: 74hcxx,  match: "74HC[0-9]+|74HCT[0-9]+|74LS[0-9]+|CD4[0-9]+"}
+
+  - {role: protection, family: smaj,  match: "SMAJ[0-9]+|SMBJ[0-9]+|SM712|SM6T[0-9]+|SMCJ[0-9]+"}
+  - {role: protection, family: tvs,   match: "ESD[0-9]+|PGB[0-9]+|SRV05|USBLC6"}
+  - {role: crystal, family: xtal,     match: "XTAL|CRYSTAL|ABLS|HC-?49|C3E[-_]?|AB38T"}
+
+  # --- Passives / connectors / fallthrough -----------------------------
+  - {role: passive,   family: capacitor, match: "Device:C[PP]?$|\\bCAP\\b"}
+  - {role: passive,   family: resistor,  match: "Device:R$|Device:R_US$"}
+  - {role: passive,   family: inductor,  match: "Device:L$"}
+  - {role: passive,   family: diode,     match: "Device:D$|Device:LED$|1N[0-9]{4}|SS[0-9]{2,}[A-Z]?"}
+  - {role: connector, family: conn,      match: "Connector:|TerminalBlock_|Conn_[0-9]|TYPE[-_]?C|USB_[AB]|\\bJACK\\b|\\bHEADER\\b|1761606|1825910|4PIN_RELAY"}
