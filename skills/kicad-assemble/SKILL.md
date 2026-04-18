@@ -4,10 +4,11 @@ description: |
   Create a KiCad schematic with components placed and nets labelled,
   starting from a high-level spec (MCU + peripherals list).
 
-  Looks up historical pin connections from the knowledge graph
-  (~/kc/kicad-knowledge), finds symbols from the PRASAD library
-  (~/Documents/PRASAD/05326/Footprint), downloads missing symbols
-  using the browse skill, and generates a ready-to-open KiCad 9.0 project.
+  Resolves symbols from the user's configured library paths
+  (see `kstack_config`) — typically a personal symbol folder, KiCad 9
+  stock libraries, or a downloaded-parts staging area. Consults a
+  knowledge graph of past designs for pin conventions and footprint
+  history. Generates a ready-to-open KiCad 9.0 project.
 
   Invoke for: "create a schematic for STM32 + RS485",
   "generate a KiCad project with ESP32 and optocoupler",
@@ -20,21 +21,53 @@ allowed-tools:
   - Write
   - Glob
   - Grep
+  - AskUserQuestion
 ---
 
 You are creating a KiCad schematic project. Follow these steps exactly.
 
-## Fixed paths (always use these unless user overrides)
+## Step 0 — Confirm configuration and target directory
 
-| What | Path |
-|---|---|
-| KiCad projects | `/home/pc/Documents/kicad/<project_name>/` |
-| Knowledge graph | `/home/pc/kc/kicad-knowledge/blocks/` |
-| PRASAD symbols | `/home/pc/Documents/PRASAD/05326/Footprint/` |
-| Downloaded parts | `/home/pc/Documents/footprints/` |
-| Edge-cut library | `/home/pc/kc/kicad-edgecuts/lib/` |
-| Footprint-usage index | `/home/pc/kc/kicad-footprints/index.yaml` |
-| Default KiCad ver | `9.0` |
+1. **Check Kstack config**. Run:
+   ```bash
+   python3 ~/.claude/skills/common/kstack_config.py show
+   ```
+   If any path marked `✗` is needed for this request (e.g. `prasad_dir` missing
+   but user asked for a part that's only there), tell the user and offer:
+   ```bash
+   python3 ~/.claude/skills/common/kstack_config.py init
+   ```
+   If the user has never run init, **always offer it first**. Paths resolved
+   there become defaults for every subsequent command.
+
+2. **Ask where the project goes.** Unless the user already named a folder,
+   ask: *"Is this a **new** project or should I extend an **existing** one?
+   Which directory?"*
+   - New default: `<kicad_projects_dir>/<project_name>/`
+   - Existing: the user's path. If you detect a `.kicad_pro` already there
+     and they didn't mean to overwrite, stop and confirm.
+
+   Pass the answer via `--out <DIR>` and `--mode {new|existing|auto}`.
+   `auto` (default) decides based on whether the target `.kicad_pro` exists
+   and prints which mode it chose.
+
+## Fixed paths (overridable — see kstack-config)
+
+| Key | Default | Purpose |
+|---|---|---|
+| `kicad_projects_dir` | `~/Documents/kicad` | parent of each project folder |
+| `prasad_dir` | `~/Documents/PRASAD/05326/Footprint` | personal sym/fp folder |
+| `stock_symbols_dir` | `/usr/share/kicad/symbols` | KiCad 9 stock syms |
+| `stock_footprints_dir` | `/usr/share/kicad/footprints` | KiCad 9 stock `.pretty` |
+| `knowledge_dir` | `~/kc/kicad-knowledge` | mined knowledge graph |
+| `edgecut_lib` | `~/kc/kicad-edgecuts/lib` | board-outline library |
+| `fp_index_path` | `~/kc/kicad-footprints/index.yaml` | footprint history |
+| `download_dir` | `~/Documents/footprints` | freshly downloaded parts |
+
+If `knowledge_dir` is empty (no past projects mined), the generator still
+works — it just can't suggest historical pin conventions; footprints
+then resolve via (a) the symbol's `Footprint` property, (b) the stock `.pretty`
+libs via `ki_fp_filters`.
 
 ---
 
@@ -53,7 +86,9 @@ from the knowledge graph (`rs485/sn65hvd` → `SN65HVD3082EDR`).
 ## Step 2 — Consult the knowledge graph
 
 For each peripheral, read its block YAML from
-`/home/pc/kc/kicad-knowledge/blocks/<role>.yaml` (e.g. `rs485_sn65hvd.yaml`).
+`<knowledge_dir>/blocks/<role>.yaml` (e.g. `rs485_sn65hvd.yaml`).
+Resolve `<knowledge_dir>` with
+`python3 ~/.claude/skills/common/kstack_config.py path knowledge_dir`.
 
 Look at `mcu_connections[].per_project` to find which MCU pins were
 historically used with this peripheral. Use the `per_project` entry that
@@ -77,7 +112,7 @@ Match MCU pins to peripheral pins using UART/SPI conventions:
 ## Step 3 — Check which symbols exist
 
 ```bash
-ls /home/pc/Documents/PRASAD/05326/Footprint/<PartName>/
+ls "$(python3 ~/.claude/skills/common/kstack_config.py path prasad_dir)/<PartName>/"
 ```
 
 If the directory (or a `.kicad_sym` file) exists → symbol is available.
@@ -93,12 +128,13 @@ KiCad symbol file:
 1. Search SnapEDA, Component Search Engine (componentsearchengine.com),
    Ultra Librarian, or the manufacturer's website.
 2. Download the `.kicad_sym` (and `.kicad_mod` if footprint also needed).
-3. Save to `/home/pc/Documents/footprints/<PartName>/`.
+3. Save to `<download_dir>/<PartName>/` (resolve with
+   `kstack_config.py path download_dir`).
 4. Register with kicad-lib-add:
    ```bash
+   DL="$(python3 ~/.claude/skills/common/kstack_config.py path download_dir)"
    python3 ~/.claude/skills/kicad-lib-add/kicad_lib_add.py \
-       /home/pc/Documents/footprints/<PartName> \
-       --kicad-version 9.0
+       "$DL/<PartName>" --kicad-version 9.0
    ```
 
 ---
@@ -153,7 +189,7 @@ python3 ~/.claude/skills/kicad-assemble/kicad_sch_gen.py \
     --kicad-version 9.0
 ```
 
-This creates `/home/pc/Documents/kicad/<project_name>/`:
+This creates `<kicad_projects_dir>/<project_name>/`:
 - `<project_name>.kicad_pro` — KiCad project file
 - `<project_name>.kicad_sch` — schematic with placed symbols + net labels
 
@@ -196,7 +232,8 @@ The index is built once (and whenever new projects have been laid out)
 with:
 ```bash
 python3 ~/.claude/skills/kicad-assemble/footprint_index.py build \
-    /home/pc/Documents --out ~/kc/kicad-footprints
+    "$(python3 ~/.claude/skills/common/kstack_config.py path kicad_projects_dir)" \
+    --out "$(dirname "$(python3 ~/.claude/skills/common/kstack_config.py path fp_index_path)")"
 ```
 
 When generating the schematic, for any component whose `footprint` is
@@ -214,14 +251,18 @@ LoRa_wroom"*), drop it onto the new `.kicad_pcb` after it is generated:
 python3 ~/.claude/skills/kicad-edgecut/kicad_edgecut.py list --filter lora
 python3 ~/.claude/skills/kicad-edgecut/kicad_edgecut.py place \
     --from LoRa_wroom \
-    --to   /home/pc/Documents/kicad/<project_name>/<project_name>.kicad_pcb \
+    --to   "<kicad_projects_dir>/<project_name>/<project_name>.kicad_pcb" \
     --at   100,100 --clear
 ```
+
+If no historical outline fits, generate one instead (see kicad-edgecut
+SKILL.md — ask the user for shape, width×height, corner radius, and
+mounting-hole count).
 
 The library is built once via:
 ```bash
 python3 ~/.claude/skills/kicad-edgecut/kicad_edgecut.py extract \
-    /home/pc/Documents --out ~/kc/kicad-edgecuts/lib
+    "$(python3 ~/.claude/skills/common/kstack_config.py path kicad_projects_dir)"
 ```
 
 If the user specifies dimensions instead of a name (*"about 100×70"*),
@@ -262,8 +303,8 @@ python3 ~/.claude/skills/kicad-assemble/kicad_sch_gen.py \
 ```bash
 python3 ~/.claude/skills/kicad-assemble/kicad_assemble.py \
     /tmp/<project>_design.yaml \
-    --out /home/pc/Documents/kicad/<project>/firmware \
-    --blocks-dir /home/pc/kc/kicad-knowledge/blocks
+    --out "<kicad_projects_dir>/<project>/firmware" \
+    --blocks-dir "$(python3 ~/.claude/skills/common/kstack_config.py path knowledge_dir)/blocks"
 ```
 
 ---
@@ -294,7 +335,7 @@ the peripheral pin endpoint — KiCad connects them automatically by name.
 
 Run to see all extracted blocks:
 ```bash
-ls /home/pc/kc/kicad-knowledge/blocks/
+ls "$(python3 ~/.claude/skills/common/kstack_config.py path knowledge_dir)/blocks/"
 ```
 
 Common roles:

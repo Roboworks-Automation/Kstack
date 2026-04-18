@@ -20,16 +20,28 @@ allowed-tools:
 
 ## Step 1 — Pick a scope
 
-- Single project:   `~/Documents/kicad/Neo`
-- All projects:     `~/Documents/kicad`
-- Or any parent directory containing multiple projects.
+Ask the user whether to scan a single project or their whole KiCad tree.
+Use `kstack_config` to discover the default projects directory:
+
+```bash
+python3 ~/.claude/skills/common/kstack_config.py path kicad_projects_dir
+```
+
+Typical choices:
+- Single project:   `<kicad_projects_dir>/Neo`
+- All projects:     `<kicad_projects_dir>`
+- Any other parent directory containing multiple `.kicad_pro` files.
+
+If `kstack_config show` reports missing keys, offer to run
+`python3 ~/.claude/skills/common/kstack_config.py init` first.
 
 ## Step 2 — Run the extractor
 
 ```bash
+OUT="$(python3 ~/.claude/skills/common/kstack_config.py path knowledge_dir)"
 conda run -n kicad-agent python3 \
   ~/.claude/skills/kicad-block-extract/kicad_block_extract.py \
-  <PATH> --out ~/kicad-blocks
+  <PATH> --out "$OUT"
 ```
 
 If `kicad_parse.py` has been compiled to work without kiutils, plain `python3` also works.

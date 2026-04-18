@@ -94,19 +94,33 @@ bash install.sh
 This symlinks every folder in `skills/` into `~/.claude/skills/`.
 Use `bash install.sh --copy` if you prefer copies over symlinks.
 
-### 4 — (Optional) Point at your project tree
+### 4 — Tell Kstack where your KiCad files live
 
-The skills assume these default paths; override via CLI flags if yours differ:
+Run the one-time interactive config wizard:
 
-| Default | What it is |
-|---|---|
-| `~/Documents/kicad` | Tree to scan for existing projects |
-| `~/Documents/PRASAD/05326/Footprint` | Vendor symbol/footprint libs |
-| `~/kc/kicad-knowledge` | Knowledge graph output |
-| `~/kc/kicad-edgecuts/lib` | Extracted board outlines |
-| `~/kc/kicad-footprints/index.yaml` | Footprint-usage history |
-| `/usr/share/kicad/symbols` | KiCad 9 stock symbol libs |
-| `/usr/share/kicad/footprints` | KiCad 9 stock footprint libs (`*.pretty`) |
+```bash
+python3 skills/common/kstack_config.py init
+```
+
+You'll be asked for:
+- `kicad_projects_dir` — root of your KiCad projects (default `~/Documents/kicad`)
+- `prasad_dir` — optional vendor symbol/footprint libs
+- `stock_symbols_dir` / `stock_footprints_dir` — KiCad 9 stock libs
+  (default `/usr/share/kicad/{symbols,footprints}`)
+- `knowledge_dir` — where to write the block-extract knowledge graph
+- `edgecut_lib` — where to store extracted board outlines
+- `fp_index_path` — footprint-usage history file
+- `download_dir` — cache for fetched datasheets / libraries
+
+Settings are saved to `~/.config/kstack/config.yaml`. Override any single
+value on a run with a CLI flag, an env var (`KSTACK_KICAD_PROJECTS_DIR=...`),
+or by editing the YAML directly. See [`skills/common/README.md`](skills/common/README.md)
+for the full key reference and resolution order.
+
+```bash
+# Inspect resolved paths at any time:
+python3 skills/common/kstack_config.py show
+```
 
 ---
 
@@ -131,8 +145,8 @@ In a KiCad project folder:
 ```bash
 conda run -n kicad-agent python3 \
     skills/kicad-block-extract/kicad_block_extract.py \
-    --root ~/Documents/kicad \
-    --out ~/kc/kicad-knowledge
+    --root "$(python3 skills/common/kstack_config.py path kicad_projects_dir)" \
+    --out  "$(python3 skills/common/kstack_config.py path knowledge_dir)"
 ```
 
 Outputs:

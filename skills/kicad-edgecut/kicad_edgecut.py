@@ -46,8 +46,14 @@ except ImportError:
     print("ERROR: pip install kiutils", file=sys.stderr)
     sys.exit(2)
 
+# Shared path config (optional).
+try:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "common"))
+    from kstack_config import cfg as _kcfg  # type: ignore
+    DEFAULT_LIB = _kcfg("edgecut_lib")
+except Exception:
+    DEFAULT_LIB = Path.home() / "kc" / "kicad-edgecuts" / "lib"
 
-DEFAULT_LIB = Path.home() / "kc" / "kicad-edgecuts" / "lib"
 DEFAULT_LAYER = "Edge.Cuts"
 
 # Minimal 2-layer KiCad 9.0 stack — injected when target PCB has no
@@ -379,10 +385,196 @@ def cmd_place(args: argparse.Namespace) -> int:
 
     board.to_file(str(target))
     b = data["bbox"]
-    print(f"  placed '{data['name']}' ({b['width']}×{b['height']} mm, "
+    print(f"  placed '{data.get('name') or data.get('project', '?')}' ({b['width']}×{b['height']} mm, "
           f"{len(new_items)} items) at top-left=({ox}, {oy}) "
           f"bottom-right=({ox + b['width']}, {oy + b['height']}) on {layer}")
     print(f"  target: {target}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Generate — synthetic outlines (rect/circle + mounting holes)
+# ---------------------------------------------------------------------------
+#
+# Produces a YAML outline in the same schema as `extract` so `place` works
+# unchanged.  Mounting holes become GrCircle items on the Edge.Cuts layer
+# (drill the actual hole with a footprint in pcbnew afterward, OR use the
+# resulting outline purely as a visual template).
+
+def _parse_holes(spec: str | None, w: float, h: float, margin: float
+                 ) -> list[tuple[float, float]]:
+    """
+    Parse a mounting-hole specification.
+
+      --holes 0                     no holes
+      --holes 4                     one in each corner, `margin` from edges
+      --holes 2                     on centre-line, short edge
+      --holes "x1,y1;x2,y2;..."     explicit list (top-left origin)
+    """
+    if not spec or spec in ("0", "none", ""):
+        return []
+    spec = spec.strip()
+    if ";" in spec or "," in spec and any(c for c in spec if c not in "0123456789"):
+        # explicit list — coords relative to the outline's top-left corner
+        pts: list[tuple[float, float]] = []
+        for pair in spec.split(";"):
+            pair = pair.strip()
+            if not pair:
+                continue
+            xs, ys = pair.split(",")
+            pts.append((float(xs), float(ys)))
+        return pts
+    # numeric count
+    try:
+        n = int(spec)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"bad --holes value: {spec!r}")
+    if n <= 0:
+        return []
+    if n == 2:
+        return [(w / 2, margin), (w / 2, h - margin)]
+    if n == 4:
+        return [(margin, margin),       (w - margin, margin),
+                (margin, h - margin),   (w - margin, h - margin)]
+    if n == 6:
+        return [(margin, margin),       (w / 2, margin),     (w - margin, margin),
+                (margin, h - margin),   (w / 2, h - margin), (w - margin, h - margin)]
+    raise argparse.ArgumentTypeError(
+        f"--holes {n} not a supported preset (use 0/2/4/6 or explicit 'x,y;x,y;...')")
+
+
+def _gen_rect(name: str, width: float, height: float,
+              corner_radius: float, hole_pts: list[tuple[float, float]],
+              hole_dia: float) -> dict:
+    items: list[dict] = []
+    r = max(0.0, min(corner_radius, width / 2 - 0.1, height / 2 - 0.1))
+    if r <= 0.01:
+        # simple rectangle — four lines so KiCad draws a clean outline
+        items.append({"type": "line", "start": [0, 0],          "end": [width, 0],     "width": 0.1})
+        items.append({"type": "line", "start": [width, 0],      "end": [width, height],"width": 0.1})
+        items.append({"type": "line", "start": [width, height], "end": [0, height],    "width": 0.1})
+        items.append({"type": "line", "start": [0, height],     "end": [0, 0],         "width": 0.1})
+    else:
+        # rounded rect: 4 lines + 4 arcs (mid-points computed geometrically)
+        import math
+        def arc(cx, cy, a0_deg, a1_deg):
+            # produce (start, mid, end) at the corner radius.
+            a0, a1 = math.radians(a0_deg), math.radians(a1_deg)
+            am = math.radians((a0_deg + a1_deg) / 2)
+            return ([cx + r * math.cos(a0), cy + r * math.sin(a0)],
+                    [cx + r * math.cos(am), cy + r * math.sin(am)],
+                    [cx + r * math.cos(a1), cy + r * math.sin(a1)])
+        # straight edges
+        items.append({"type": "line", "start": [r,          0],      "end": [width - r, 0],      "width": 0.1})
+        items.append({"type": "line", "start": [width,      r],      "end": [width,     height - r], "width": 0.1})
+        items.append({"type": "line", "start": [width - r,  height], "end": [r,         height], "width": 0.1})
+        items.append({"type": "line", "start": [0,          height - r], "end": [0,     r],      "width": 0.1})
+        # corner arcs (kicad y-down: negative angles)
+        s, m, e = arc(width - r, r,          270, 360)
+        items.append({"type": "arc", "start": s, "mid": m, "end": e, "width": 0.1})
+        s, m, e = arc(width - r, height - r, 0,   90)
+        items.append({"type": "arc", "start": s, "mid": m, "end": e, "width": 0.1})
+        s, m, e = arc(r,         height - r, 90,  180)
+        items.append({"type": "arc", "start": s, "mid": m, "end": e, "width": 0.1})
+        s, m, e = arc(r,         r,          180, 270)
+        items.append({"type": "arc", "start": s, "mid": m, "end": e, "width": 0.1})
+
+    for (hx, hy) in hole_pts:
+        items.append({
+            "type": "circle",
+            "center": [round(hx, 4), round(hy, 4)],
+            "end":    [round(hx + hole_dia / 2, 4), round(hy, 4)],
+            "width": 0.1,
+            "fill":  "no",
+        })
+
+    return {
+        "project": name,
+        "source": "generated:rect",
+        "layer": DEFAULT_LAYER,
+        "bbox": {
+            "orig_min": [0.0, 0.0],
+            "orig_max": [width, height],
+            "width":    round(width, 4),
+            "height":   round(height, 4),
+        },
+        "item_count": len(items),
+        "items": items,
+    }
+
+
+def _gen_circle(name: str, diameter: float,
+                hole_pts: list[tuple[float, float]], hole_dia: float) -> dict:
+    r = diameter / 2
+    items: list[dict] = [{
+        "type": "circle",
+        "center": [r, r],
+        "end":    [diameter, r],
+        "width":  0.1,
+        "fill":   "no",
+    }]
+    for (hx, hy) in hole_pts:
+        items.append({
+            "type": "circle",
+            "center": [round(hx, 4), round(hy, 4)],
+            "end":    [round(hx + hole_dia / 2, 4), round(hy, 4)],
+            "width":  0.1,
+            "fill":   "no",
+        })
+    return {
+        "project": name,
+        "source": "generated:circle",
+        "layer": DEFAULT_LAYER,
+        "bbox": {
+            "orig_min": [0.0, 0.0],
+            "orig_max": [diameter, diameter],
+            "width":    round(diameter, 4),
+            "height":   round(diameter, 4),
+        },
+        "item_count": len(items),
+        "items": items,
+    }
+
+
+def cmd_generate(args: argparse.Namespace) -> int:
+    lib = args.lib.expanduser().resolve()
+    lib.mkdir(parents=True, exist_ok=True)
+
+    name = args.name
+    shape = args.shape
+    hole_dia = args.hole_diameter
+
+    if shape == "rect":
+        w, h = args.width, args.height
+        if not (w and h):
+            print("ERROR: rect requires --width and --height", file=sys.stderr)
+            return 2
+        hole_pts = _parse_holes(args.holes, w, h, args.hole_margin)
+        data = _gen_rect(name, w, h, args.corner_radius, hole_pts, hole_dia)
+    elif shape == "circle":
+        d = args.diameter or args.width
+        if not d:
+            print("ERROR: circle requires --diameter (or --width)", file=sys.stderr)
+            return 2
+        hole_pts = _parse_holes(args.holes, d, d, args.hole_margin)
+        data = _gen_circle(name, d, hole_pts, hole_dia)
+    else:
+        print(f"ERROR: unsupported shape {shape!r}", file=sys.stderr)
+        return 2
+
+    out_path = lib / f"{name}.yaml"
+    out_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    print(f"  generated '{name}' ({data['bbox']['width']}\u00d7"
+          f"{data['bbox']['height']} mm, {data['item_count']} items, "
+          f"{len(hole_pts)} mounting holes \u00f8{hole_dia}mm)")
+    print(f"  saved to {out_path}")
+    if args.to:
+        target = args.to.expanduser().resolve()
+        # reuse the place command by synthesising args
+        place_args = argparse.Namespace(
+            from_=str(out_path), to=target, at=args.at, layer=DEFAULT_LAYER,
+            clear=args.clear, lib=lib, no_backup=args.no_backup)
+        return cmd_place(place_args)
     return 0
 
 
@@ -427,6 +619,37 @@ def main() -> int:
     pp.add_argument("--lib", type=Path, default=DEFAULT_LIB)
     pp.add_argument("--no-backup", action="store_true")
     pp.set_defaults(func=cmd_place)
+
+    # ---- generate ---------------------------------------------------------
+    pg = sub.add_parser("generate",
+            help="synthesize a rect/circle outline (+ mounting holes)")
+    pg.add_argument("--name", required=True,
+                    help="outline name, saved as <lib>/<name>.yaml")
+    pg.add_argument("--shape", choices=["rect", "circle"], default="rect")
+    pg.add_argument("--width", type=float, default=0.0,
+                    help="width in mm (rect)")
+    pg.add_argument("--height", type=float, default=0.0,
+                    help="height in mm (rect)")
+    pg.add_argument("--diameter", type=float, default=0.0,
+                    help="diameter in mm (circle)")
+    pg.add_argument("--corner-radius", type=float, default=0.0,
+                    help="corner radius for rounded rectangles, mm")
+    pg.add_argument("--holes", default="0",
+                    help="mounting holes: 0/2/4/6 (preset) or "
+                         "'x1,y1;x2,y2;...' explicit coords from top-left")
+    pg.add_argument("--hole-diameter", type=float, default=3.2,
+                    help="mounting-hole diameter, mm (default 3.2 for M3)")
+    pg.add_argument("--hole-margin", type=float, default=3.5,
+                    help="corner-hole distance from each edge, mm (default 3.5)")
+    pg.add_argument("--lib", type=Path, default=DEFAULT_LIB,
+                    help=f"outline library dir (default {DEFAULT_LIB})")
+    # Optional one-shot placement: generate + place into --to
+    pg.add_argument("--to", type=Path, default=None,
+                    help="if set, also place into this .kicad_pcb")
+    pg.add_argument("--at", type=_parse_xy, default=(30.0, 30.0))
+    pg.add_argument("--clear", action="store_true")
+    pg.add_argument("--no-backup", action="store_true")
+    pg.set_defaults(func=cmd_generate)
 
     args = p.parse_args()
     return args.func(args)

@@ -1,45 +1,86 @@
 # kicad-edgecut
 
-Extract board outlines (**Edge.Cuts** layer) from existing KiCad PCBs and
-drop them into a new `.kicad_pcb` file. No manual redraw.
+Two sources of board outlines, one placement tool:
+
+1. **Extract** outlines (Edge.Cuts layer) from every PCB you've ever shipped
+   and drop any of them into a new `.kicad_pcb`.
+2. **Generate** fresh rectangular / rounded-rect / circular outlines with
+   mounting holes at user-supplied dimensions.
+
+Both write the same normalized YAML schema, so `place` works either way.
 
 ## Why
 
 Every board you've already shipped is a worked example of a viable
-mechanical envelope — hole spacing, connector reach, mounting tab sizes.
-This skill turns that history into a reusable library.
+mechanical envelope. When history doesn't have the right shape, the
+generator makes a clean parametric outline instead of redrawing by hand.
 
-## Fixed paths
+## Configured paths
 
-| What | Path |
-|---|---|
-| Source scans | `/home/pc/Documents/kicad`, `/home/pc/Documents/PRASAD/PCB` |
-| Library (default `--out`) | `~/kc/kicad-edgecuts/lib/` |
+The library lives at the path resolved by `kstack_config`
+(key `edgecut_lib`, default `~/kc/kicad-edgecuts/lib`). Override with
+`--lib DIR` or by editing `~/.config/kstack/config.yaml`.
 
-Each outline is stored as a normalized YAML (origin translated to `(0,0)`),
-so placement origin is always a single `--at X,Y`.
+Each outline is stored as normalized YAML (origin at `(0, 0)` top-left;
+KiCad PCB origin is top-left, Y grows downward), so placement origin is
+always a single `--at X,Y`.
 
 ## Usage
 
 ```bash
-# 1. Build / refresh the library (scan both trees at once)
+# 1a. Build the library from past projects (one-time)
 python3 ~/.claude/skills/kicad-edgecut/kicad_edgecut.py extract \
-    /home/pc/Documents --out ~/kc/kicad-edgecuts/lib
+    "$(python3 ~/.claude/skills/common/kstack_config.py path kicad_projects_dir)"
 
-# 2. Browse it
+# 1b. Or generate a fresh outline — ALWAYS ask the user for dimensions first
+python3 ~/.claude/skills/kicad-edgecut/kicad_edgecut.py generate \
+    --name MyBoard --shape rect --width 100 --height 70 \
+    --corner-radius 3 --holes 4 --hole-diameter 3.2
+
+# 2. Browse the library
 python3 ~/.claude/skills/kicad-edgecut/kicad_edgecut.py list
 python3 ~/.claude/skills/kicad-edgecut/kicad_edgecut.py list --filter lora
 
 # 3. Drop an outline into a new (or existing) PCB
 python3 ~/.claude/skills/kicad-edgecut/kicad_edgecut.py place \
-    --from LoRa_wroom \
-    --to  /home/pc/Documents/kicad/my_new_board/my_new_board.kicad_pcb \
-    --at  100,100 --clear
+    --from MyBoard \
+    --to  ~/Documents/kicad/my_new_board/my_new_board.kicad_pcb \
+    --at  30,30 --clear
+
+# One-shot: generate and place in a single command
+python3 ~/.claude/skills/kicad-edgecut/kicad_edgecut.py generate \
+    --name MyBoard --shape rect --width 100 --height 70 --holes 4 \
+    --to ~/Documents/kicad/my_new_board/my_new_board.kicad_pcb --clear
 ```
 
-`--clear` removes existing items on the target layer first (so you can
-re-seed without doubling-up). A `.bak` is written alongside the target
-before modification unless `--no-backup` is passed.
+`--clear` removes existing items on the target layer first. A `.bak` is
+written alongside the target before modification unless `--no-backup`.
+
+## When to use generate vs extract
+
+| Situation | Command |
+|---|---|
+| User says "same shape as X" / "reuse the LoRa board" | `place --from <X>` |
+| User gives explicit dimensions (W×H, or "round, ø60") | `generate` |
+| User gives dimensions **plus** mounting-hole count | `generate --holes N` |
+| User has CAD drawing with exact hole coords | `generate --holes "x1,y1;x2,y2;..."` |
+
+## Asking the user (generate workflow)
+
+Before running `generate`, always confirm:
+
+1. **Shape** — `rect` (with optional corner radius) or `circle`.
+2. **Dimensions** — width × height (rect) or diameter (circle), in mm.
+3. **Mounting holes** — count (0, 2, 4, or 6 preset), or explicit X,Y list
+   from the top-left corner.
+4. **Hole diameter** — default 3.2 mm (M3 clearance). Ask if unsure.
+5. **Corner radius** — default 0. Suggest 2–5 mm for rounded corners.
+
+`--holes` presets:
+- `0` — no holes
+- `2` — centreline, short edges
+- `4` — one per corner (at `--hole-margin` from each edge, default 3.5 mm)
+- `6` — 4 corners + 2 mid-edge
 
 ## YAML schema
 
@@ -83,8 +124,9 @@ python3 ~/.claude/skills/kicad-edgecut/kicad_edgecut.py place \
 ```
 
 If the user says *"use the edgecut from LoRa_wroom"*, look it up by stem.
-If the user specifies dimensions like *"100×70 mm"*, `list` the library
-and match by `Size(mm)`.
+If the user specifies dimensions like *"100×70 mm"*, first `list` the
+library and match by `Size(mm)`; if nothing fits, fall back to
+`generate --shape rect --width 100 --height 70`.
 
 ## Limits
 
@@ -93,5 +135,6 @@ and match by `Size(mm)`.
 - Kiutils occasionally fails on old/malformed PCBs (`list index out of
   range`) — those are reported as FAIL and skipped; re-save them in KiCad
   9.0 once to normalize.
-- Holes/mounting drills live in footprints, not on Edge.Cuts. This skill
-  intentionally only touches outline geometry.
+- `generate` emits mounting holes as circles on `Edge.Cuts` (so KiCad
+  cuts them during fabrication). If you need plated pads around the
+  holes, add mounting-hole footprints separately.

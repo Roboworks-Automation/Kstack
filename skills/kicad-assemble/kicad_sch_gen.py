@@ -57,19 +57,35 @@ except ImportError:
     print("ERROR: PyYAML not installed.  Run: pip install pyyaml", file=sys.stderr)
     sys.exit(2)
 
+# Import shared path config.  Falls back to pure defaults if module isn't on path.
+try:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "common"))
+    from kstack_config import cfg as _kcfg  # type: ignore
+except Exception:
+    _kcfg = None
+
+
+def _path(key: str, fallback: Path) -> Path:
+    if _kcfg is None:
+        return fallback
+    try:
+        return _kcfg(key)
+    except Exception:
+        return fallback
+
 
 # ─── Defaults ─────────────────────────────────────────────────────────────────
-DEFAULT_PROJECT_DIR    = Path.home() / "Documents/kicad"
-DEFAULT_KNOWLEDGE_DIR  = Path.home() / "kc/kicad-knowledge"
-DEFAULT_PRASAD_DIR     = Path.home() / "Documents/PRASAD/05326/Footprint"
-DEFAULT_DOWNLOAD_DIR   = Path.home() / "Documents/footprints"
-DEFAULT_FP_INDEX       = Path.home() / "kc/kicad-footprints/index.yaml"
+DEFAULT_PROJECT_DIR    = _path("kicad_projects_dir",   Path.home() / "Documents/kicad")
+DEFAULT_KNOWLEDGE_DIR  = _path("knowledge_dir",        Path.home() / "kc/kicad-knowledge")
+DEFAULT_PRASAD_DIR     = _path("prasad_dir",           Path.home() / "Documents/PRASAD/05326/Footprint")
+DEFAULT_DOWNLOAD_DIR   = _path("download_dir",         Path.home() / "Documents/footprints")
+DEFAULT_FP_INDEX       = _path("fp_index_path",        Path.home() / "kc/kicad-footprints/index.yaml")
 # Multi-symbol libraries (one .kicad_sym contains many parts, e.g. KiCad stock)
-DEFAULT_MULTI_LIB_DIRS = [Path("/usr/share/kicad/symbols")]
+DEFAULT_MULTI_LIB_DIRS = [_path("stock_symbols_dir",   Path("/usr/share/kicad/symbols"))]
 # Stock/user .pretty directories to scan for footprints matching ki_fp_filters.
 DEFAULT_STOCK_FP_DIRS  = [
-    Path("/usr/share/kicad/footprints"),
-    Path.home() / "Documents/PRASAD/05326/Footprint",
+    _path("stock_footprints_dir", Path("/usr/share/kicad/footprints")),
+    DEFAULT_PRASAD_DIR,
 ]
 
 
@@ -621,7 +637,11 @@ def main() -> int:
         epilog=__doc__,
     )
     p.add_argument("design", nargs="?", help="Path to design.yaml")
-    p.add_argument("--out", default="", help="Output directory (default: ~/Documents/kicad/<project>)")
+    p.add_argument("--out", default="", help="Output directory (default: <kicad_projects_dir>/<project>)")
+    p.add_argument("--mode", choices=["new", "existing", "auto"], default="auto",
+                   help="'new' refuses to overwrite; 'existing' requires the target "
+                        "project to exist; 'auto' (default) decides based on whether "
+                        "<out>/<project>.kicad_pro already exists.")
     p.add_argument("--knowledge-dir", dest="knowledge_dir", default="",
                    help="Knowledge graph dir (default: ~/kc/kicad-knowledge)")
     p.add_argument("--footprint-dir", dest="footprint_dir", default="",
@@ -666,6 +686,23 @@ def main() -> int:
     project_name = design["project"]
 
     out_dir = Path(args.out) if args.out else DEFAULT_PROJECT_DIR / project_name
+    out_dir = out_dir.expanduser().resolve()
+    pro_path_check = out_dir / f"{project_name}.kicad_pro"
+
+    exists_already = pro_path_check.exists()
+    if args.mode == "new" and exists_already:
+        print(f"ERROR: --mode=new but {pro_path_check} already exists.",
+              file=sys.stderr)
+        print(f"       Use --mode=existing to append, or choose a different --out.",
+              file=sys.stderr)
+        return 2
+    if args.mode == "existing" and not exists_already:
+        print(f"ERROR: --mode=existing but no project at {pro_path_check}.",
+              file=sys.stderr)
+        return 2
+    if args.mode == "auto":
+        print(f"  target: {out_dir} ({'UPDATE existing' if exists_already else 'CREATE new'} project)")
+
     out_dir.mkdir(parents=True, exist_ok=True)
 
     root_uuid = _uid()
