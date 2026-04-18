@@ -22,18 +22,21 @@ Built and tested against **KiCad 9.0** on Linux.
 | [`kicad-assemble`](skills/kicad-assemble/) | Generate a ready-to-open KiCad 9.0 project from a YAML spec (MCU + peripherals + connections). Resolves symbols from PRASAD libs + KiCad 9 stock libs, maps footprints from history + `ki_fp_filters` globs, and emits wire stubs with net labels placed away from the symbol body for readability. |
 | [`kicad-lib-add`](skills/kicad-lib-add/) | Register downloaded symbol/footprint libraries into KiCad's `sym-lib-table` / `fp-lib-table` (global or per-project). |
 
-### Browser skills (optional helpers, depend on GStack)
+### Browser helpers (optional, provided by [GStack](https://github.com/graphstack/gstack))
+
+Kstack skills can call into these browser skills when they need to fetch a
+datasheet or a vendor symbol/footprint that isn't already local:
 
 | Skill | What it does |
 |---|---|
-| [`browse`](skills/browse/) | Fast headless browser for QA / fetching datasheets / dogfooding. |
-| [`open-gstack-browser`](skills/open-gstack-browser/) | Launch a visible AI-controlled Chromium window. |
-| [`setup-browser-cookies`](skills/setup-browser-cookies/) | Import cookies from your real browser into the headless session (for paywalled datasheets / authenticated vendor portals). |
+| `browse` | Fast headless browser for QA / fetching datasheets. |
+| `open-gstack-browser` (a.k.a. `connect-chrome`) | Launch a visible AI-controlled Chromium window. |
+| `setup-browser-cookies` | Import cookies from your real browser (for paywalled datasheets / authenticated vendor portals). |
 
-> These three rely on the separate [GStack](https://github.com/graphstack) runtime
-> (`~/.gstack/…`) and are included for completeness. They're useful when the
-> KiCad skills need to download a datasheet or a vendor symbol/footprint; skip
-> them if you don't use GStack.
+These ship as part of the separate **GStack** runtime and are **not vendored
+here** — they live in `~/.claude/skills/gstack/{browse,connect-chrome,setup-browser-cookies}/`
+after installing GStack. Kstack works without them; they just make the
+"fetch a missing symbol" loop automatic.
 
 ---
 
@@ -46,11 +49,9 @@ Kstack/
 │   ├── kicad-block-extract/     # Knowledge graph builder
 │   ├── kicad-edgecut/           # Board-outline library
 │   ├── kicad-assemble/          # Schematic generator
-│   ├── kicad-lib-add/           # Register libs into KiCad
-│   ├── browse/                  # Headless browser (gstack)
-│   ├── open-gstack-browser/     # Visible browser (gstack)
-│   └── setup-browser-cookies/   # Import browser cookies (gstack)
+│   └── kicad-lib-add/           # Register libs into KiCad
 ├── install.sh                   # Symlink skills into ~/.claude/skills/
+├── requirements.txt             # kiutils, PyYAML
 ├── LICENSE
 └── README.md
 ```
